@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
-const API_URL = 'http://localhost:3001'
+const API_URL = 'https://kaltech-chat-application-testing.onrender.com'
 
 export default function Register() {
   const [name, setName] = useState('')

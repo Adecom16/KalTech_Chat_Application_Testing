@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { io } from 'socket.io-client'
 
-const API_URL = 'http://localhost:3001'
+const API_URL = 'https://kaltech-chat-application-testing.onrender.com'
 
 export default function Chat() {
   const [conversations, setConversations] = useState([])

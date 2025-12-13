@@ -4,7 +4,7 @@ import { HiOutlineMail, HiOutlineLockClosed } from 'react-icons/hi'
 import { ImSpinner8 } from 'react-icons/im'
 import Logo from '../components/Logo'
 
-const API_URL = 'http://localhost:3001'
+const API_URL = 'https://kaltech-chat-application-testing.onrender.com'
 
 export default function Login() {
   const [email, setEmail] = useState('')
