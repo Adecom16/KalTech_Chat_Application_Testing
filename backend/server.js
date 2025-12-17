@@ -505,6 +505,9 @@ app.post('/api/conversations/:id/upload', authMiddleware, upload.single('file'),
     else if (['.mp4', '.webm', '.mov'].includes(ext)) type = 'video'
     else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) type = 'audio'
 
+    // Check if this is a disappearing media message
+    const isDisappearing = req.body.disappearing === 'true'
+
     const message = new Message({
       conversationId: req.params.id,
       sender: req.user._id,
@@ -512,7 +515,8 @@ app.post('/api/conversations/:id/upload', authMiddleware, upload.single('file'),
       type,
       fileUrl,
       fileName: req.file.originalname,
-      fileSize: req.file.size
+      fileSize: req.file.size,
+      disappearing: isDisappearing
     })
     await message.save()
 
@@ -531,6 +535,7 @@ app.post('/api/conversations/:id/upload', authMiddleware, upload.single('file'),
       fileSize: message.fileSize,
       sender: message.sender,
       createdAt: message.createdAt,
+      disappearing: message.disappearing,
       isMine: true
     }
 
@@ -670,6 +675,9 @@ app.post('/api/messages/:id/reaction', authMiddleware, async (req, res) => {
 // ============================================
 const onlineUsers = new Map()
 
+// Helper to get online users list
+const getOnlineUsersList = () => Array.from(onlineUsers.keys())
+
 io.on('connection', (socket) => {
   console.log('Socket connected:', socket.id)
 
@@ -679,32 +687,137 @@ io.on('connection', (socket) => {
     socket.userId = userId
     
     await User.findByIdAndUpdate(userId, { online: true, lastSeen: new Date() })
-    io.emit('user_status', { userId, online: true })
+    
+    // Broadcast to all users that this user is online
+    io.emit('user_status', { userId, online: true, lastSeen: new Date() })
+    
+    // Send current online users list to the newly connected user
+    socket.emit('online_users', getOnlineUsersList())
+    
+    console.log(`User ${userId} is now online. Total online: ${onlineUsers.size}`)
   })
 
-  socket.on('typing', async ({ conversationId, isTyping }) => {
-    const conv = await Conversation.findById(conversationId)
-    if (conv) {
-      conv.participants.forEach(p => {
-        if (p.toString() !== socket.userId) {
-          io.to(p.toString()).emit('user_typing', { 
-            conversationId, 
-            userId: socket.userId, 
-            isTyping 
+  socket.on('typing', async ({ conversationId, isTyping, userName }) => {
+    try {
+      const conv = await Conversation.findById(conversationId)
+      if (conv) {
+        conv.participants.forEach(p => {
+          if (p.toString() !== socket.userId) {
+            io.to(p.toString()).emit('user_typing', { 
+              conversationId, 
+              userId: socket.userId,
+              userName,
+              isTyping 
+            })
+          }
+        })
+      }
+    } catch (err) {
+      console.error('Typing event error:', err)
+    }
+  })
+
+  // Handle message seen/read
+  socket.on('message_seen', async ({ conversationId, messageIds }) => {
+    try {
+      await Message.updateMany(
+        { _id: { $in: messageIds }, sender: { $ne: socket.userId } },
+        { $addToSet: { readBy: { user: socket.userId, readAt: new Date() } } }
+      )
+      
+      const conv = await Conversation.findById(conversationId)
+      if (conv) {
+        conv.participants.forEach(p => {
+          if (p.toString() !== socket.userId) {
+            io.to(p.toString()).emit('messages_read', { 
+              conversationId, 
+              readBy: socket.userId,
+              messageIds
+            })
+          }
+        })
+      }
+    } catch (err) {
+      console.error('Message seen error:', err)
+    }
+  })
+
+  // Handle viewing disappearing media
+  socket.on('view_media', async ({ messageId }) => {
+    try {
+      const message = await Message.findById(messageId)
+      if (message && message.disappearing && !message.viewedAt) {
+        message.viewedAt = new Date()
+        message.expiresAt = new Date(Date.now() + 10000) // Expires 10 seconds after viewing
+        await message.save()
+        
+        // Notify sender that media was viewed
+        io.to(message.sender.toString()).emit('media_viewed', { messageId })
+        
+        // Schedule deletion
+        setTimeout(async () => {
+          await Message.findByIdAndUpdate(messageId, { 
+            deleted: true, 
+            fileUrl: '', 
+            text: 'Media expired' 
           })
-        }
-      })
+          
+          const conv = await Conversation.findById(message.conversationId)
+          if (conv) {
+            conv.participants.forEach(p => {
+              io.to(p.toString()).emit('media_expired', { 
+                messageId, 
+                conversationId: message.conversationId 
+              })
+            })
+          }
+        }, 10000)
+      }
+    } catch (err) {
+      console.error('View media error:', err)
     }
   })
 
   socket.on('disconnect', async () => {
     if (socket.userId) {
       onlineUsers.delete(socket.userId)
-      await User.findByIdAndUpdate(socket.userId, { online: false, lastSeen: new Date() })
-      io.emit('user_status', { userId: socket.userId, online: false, lastSeen: new Date() })
+      const lastSeen = new Date()
+      await User.findByIdAndUpdate(socket.userId, { online: false, lastSeen })
+      io.emit('user_status', { userId: socket.userId, online: false, lastSeen })
+      console.log(`User ${socket.userId} disconnected. Total online: ${onlineUsers.size}`)
     }
   })
 })
+
+// Cleanup expired disappearing messages every minute
+setInterval(async () => {
+  try {
+    const expiredMessages = await Message.find({
+      disappearing: true,
+      expiresAt: { $lte: new Date() },
+      deleted: false
+    })
+    
+    for (const msg of expiredMessages) {
+      msg.deleted = true
+      msg.fileUrl = ''
+      msg.text = 'Media expired'
+      await msg.save()
+      
+      const conv = await Conversation.findById(msg.conversationId)
+      if (conv) {
+        conv.participants.forEach(p => {
+          io.to(p.toString()).emit('media_expired', { 
+            messageId: msg._id, 
+            conversationId: msg.conversationId 
+          })
+        })
+      }
+    }
+  } catch (err) {
+    console.error('Cleanup expired messages error:', err)
+  }
+}, 60000)
 
 httpServer.listen(PORT, () => {
   console.log(`🚀 Kaltech Chat Server running on http://localhost:${PORT}`)

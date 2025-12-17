@@ -63,7 +63,20 @@ const messageSchema = new mongoose.Schema({
   reactions: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     emoji: String
-  }]
+  }],
+  // Disappearing message settings
+  disappearing: {
+    type: Boolean,
+    default: false
+  },
+  expiresAt: {
+    type: Date,
+    default: null
+  },
+  viewedAt: {
+    type: Date,
+    default: null
+  }
 }, { timestamps: true })
 
 // Index for faster queries
