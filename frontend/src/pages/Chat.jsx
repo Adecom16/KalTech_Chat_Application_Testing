@@ -798,11 +798,11 @@ export default function Chat() {
                               <video src={`${API_URL}${msg.fileUrl}`} controls className="max-w-full rounded-lg mb-2 max-h-64" />
                             )}
                             {!msg.deleted && msg.type === 'audio' && msg.fileUrl && (
-                              <div className={`flex items-center gap-3 p-2 rounded-lg mb-2 ${msg.isMine ? 'bg-katech-black/10' : darkMode ? 'bg-katech-black' : 'bg-katech-light-surface'}`}>
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${msg.isMine ? 'bg-katech-black/20' : 'bg-katech-gold/10'}`}>
+                              <div className={`flex items-center gap-2 p-3 rounded-xl min-w-[250px] ${msg.isMine ? 'bg-katech-black/15' : darkMode ? 'bg-katech-dark-surface' : 'bg-katech-light-surface'}`}>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${msg.isMine ? 'bg-katech-black/20' : 'bg-katech-gold/20'}`}>
                                   <svg className={`w-5 h-5 ${msg.isMine ? 'text-katech-black' : 'text-katech-gold'}`} fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
                                 </div>
-                                <audio src={`${API_URL}${msg.fileUrl}`} controls className="flex-1 h-8" />
+                                <audio src={`${API_URL}${msg.fileUrl}`} controls className="flex-1 h-10 max-w-[200px]" />
                               </div>
                             )}
                             {!msg.deleted && msg.type === 'file' && msg.fileUrl && (
